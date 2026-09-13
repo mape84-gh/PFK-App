@@ -2288,53 +2288,76 @@ function truncateAnswer(html, maxLen){
   return t;
 }
 function buildQuizFromGlossary(){
-  return glossary.map((g,idx)=>{
-    const pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def);
+  const out=[];
+  glossary.forEach((g,idx)=>{
+    // Distraktoren nur aus derselben Prioritätsstufe (Kern/Häufig) — die Begriffe sind im Glossar
+    // bereits nach Themenblock gruppiert, sodass gleiche Stufe meist auch thematisch näher liegt.
+    let pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def && x.tier===g.tier);
+    if(pool.length<3) pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def);
     shuffle(pool);
-    const distractors = pool.slice(0,3).map(x=>truncateAnswer(x.def,130));
     const correctText = truncateAnswer(g.def,130);
+    const distractors=[]; const usedTexts=new Set([correctText]);
+    for(const cand of pool){
+      const t = truncateAnswer(cand.def,130);
+      if(usedTexts.has(t)) continue;
+      usedTexts.add(t); distractors.push(t);
+      if(distractors.length>=3) break;
+    }
+    if(distractors.length<3) return;
     const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
     shuffle(opts);
-    return {
+    out.push({
       id:'gl_'+idx,
       q:`Was bedeutet "${g.term}"?`,
       options: opts.map(o=>o.t),
       correct: opts.findIndex(o=>o.c),
       exp: g.def,
       tier: g.tier
-    };
+    });
   });
+  return out;
 }
+// WICHTIG: Distraktoren müssen inhaltlich zum Thema der Frage passen (sonst zu leicht/unsinnig,
+// z.B. eine Betriebsrats-Antwort bei einer Frage zum situativen Führungsstil). Deshalb NUR aus
+// derselben Kategorie bzw. demselben Handlungsbereich ziehen; reicht der Vorrat nicht für 3
+// unterschiedliche, plausible Distraktoren, wird die Frage lieber übersprungen als eine
+// thematisch fremde Antwort einzubauen.
 function buildQuizFromPapers(){
-  return examPapers.map((p,idx)=>{
+  const out=[];
+  examPapers.forEach((p,idx)=>{
     const pool = examPapers.filter((x,i)=>i!==idx && x.hb===p.hb && x.a!==p.a);
     shuffle(pool);
-    let distractors = pool.slice(0,3).map(x=>truncateAnswer(x.a,130));
-    while(distractors.length<3){
-      const other = examPapers[(idx+distractors.length+1)%examPapers.length];
-      distractors.push(truncateAnswer(other.a,130));
-    }
     const correctText = truncateAnswer(p.a,130);
+    const distractors=[]; const usedTexts=new Set([correctText]);
+    for(const cand of pool){
+      const t = truncateAnswer(cand.a,130);
+      if(usedTexts.has(t)) continue;
+      usedTexts.add(t); distractors.push(t);
+      if(distractors.length>=3) break;
+    }
+    if(distractors.length<3) return; // zu wenig Aufgaben im selben Handlungsbereich -> überspringen
     const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
     shuffle(opts);
-    return {
+    out.push({
       id:'ep_'+idx,
       q:`(${p.exam}, ${p.hb}) ${p.q}`,
       options: opts.map(o=>o.t),
       correct: opts.findIndex(o=>o.c),
       exp: p.a,
       tier: 'Kern'
-    };
+    });
   });
+  return out;
 }
 // Zusätzlich: eine MC-Frage pro Karteikarte (921 Karten), Distraktoren = echte, aber falsche
-// Antworten anderer Karten derselben Kategorie (fällt die Kategorie zu klein aus, wird auf die
-// gleiche Prioritätsstufe ausgewichen). So kommt praktisch jede Karte auch als Quizfrage vor.
+// Antworten anderer Karten DERSELBEN Kategorie; reicht das nicht, Distraktoren aus demselben
+// Handlungsbereich (HB1-4) — nie aus fachfremden Kategorien. Reicht auch das nicht, wird die
+// Karte für das Quiz übersprungen (bleibt aber ganz normal als Lernkarte nutzbar).
 function buildQuizFromFlashcards(){
   const byCat = {};
   flashcards.forEach(c=>{ (byCat[c.cat]=byCat[c.cat]||[]).push(c); });
-  const byTier = {};
-  flashcards.forEach(c=>{ (byTier[c.tier]=byTier[c.tier]||[]).push(c); });
+  const byChapter = {};
+  flashcards.forEach(c=>{ const ch=chapterOf(c.cat); (byChapter[ch]=byChapter[ch]||[]).push(c); });
   const seen = new Set(); // vermeidet quasi-identische Fragen/Antworten
   const out = [];
   flashcards.forEach((c,idx)=>{
@@ -2342,7 +2365,7 @@ function buildQuizFromFlashcards(){
     const key = c.q+'|'+correctText;
     if(seen.has(key)) return;
     let candidates = (byCat[c.cat]||[]).filter(x=>x!==c);
-    if(candidates.length<3) candidates = (byTier[c.tier]||[]).filter(x=>x!==c);
+    if(candidates.length<3) candidates = (byChapter[chapterOf(c.cat)]||[]).filter(x=>x!==c);
     shuffle(candidates);
     const distractors=[]; const usedTexts=new Set([correctText]);
     for(const cand of candidates){
@@ -2351,7 +2374,7 @@ function buildQuizFromFlashcards(){
       usedTexts.add(t); distractors.push(t);
       if(distractors.length>=3) break;
     }
-    if(distractors.length<3) return; // zu wenig Alternativen in dieser Kategorie/Stufe -> überspringen
+    if(distractors.length<3) return; // zu wenig thematisch passende Alternativen -> überspringen
     seen.add(key);
     const opts=[{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
     shuffle(opts);
