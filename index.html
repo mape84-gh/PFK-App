@@ -2327,8 +2327,47 @@ function buildQuizFromPapers(){
     };
   });
 }
+// Zusätzlich: eine MC-Frage pro Karteikarte (921 Karten), Distraktoren = echte, aber falsche
+// Antworten anderer Karten derselben Kategorie (fällt die Kategorie zu klein aus, wird auf die
+// gleiche Prioritätsstufe ausgewichen). So kommt praktisch jede Karte auch als Quizfrage vor.
+function buildQuizFromFlashcards(){
+  const byCat = {};
+  flashcards.forEach(c=>{ (byCat[c.cat]=byCat[c.cat]||[]).push(c); });
+  const byTier = {};
+  flashcards.forEach(c=>{ (byTier[c.tier]=byTier[c.tier]||[]).push(c); });
+  const seen = new Set(); // vermeidet quasi-identische Fragen/Antworten
+  const out = [];
+  flashcards.forEach((c,idx)=>{
+    const correctText = truncateAnswer(c.a,140);
+    const key = c.q+'|'+correctText;
+    if(seen.has(key)) return;
+    let candidates = (byCat[c.cat]||[]).filter(x=>x!==c);
+    if(candidates.length<3) candidates = (byTier[c.tier]||[]).filter(x=>x!==c);
+    shuffle(candidates);
+    const distractors=[]; const usedTexts=new Set([correctText]);
+    for(const cand of candidates){
+      const t = truncateAnswer(cand.a,140);
+      if(usedTexts.has(t)) continue;
+      usedTexts.add(t); distractors.push(t);
+      if(distractors.length>=3) break;
+    }
+    if(distractors.length<3) return; // zu wenig Alternativen in dieser Kategorie/Stufe -> überspringen
+    seen.add(key);
+    const opts=[{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
+    shuffle(opts);
+    out.push({
+      id:'fc_'+idx,
+      q:c.q,
+      options:opts.map(o=>o.t),
+      correct:opts.findIndex(o=>o.c),
+      exp:c.a,
+      tier:c.tier
+    });
+  });
+  return out;
+}
 function buildAllQuizQuestions(){
-  quizQuestions = [...buildQuizFromGlossary(), ...buildQuizFromPapers()];
+  quizQuestions = [...buildQuizFromFlashcards(), ...buildQuizFromGlossary(), ...buildQuizFromPapers()];
 }
 // "Prüfungsfragen"-Tab: dieselben 40 echten Prüfungsaufgaben als offene Fragen zum
 // Selbstbeantworten mit aufklappbarer Musterlösung (statt Multiple-Choice wie im Quiz-Tab).
