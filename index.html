@@ -277,7 +277,17 @@ tr:nth-child(even) td{background:#faf8fd;}
     <button id="seg-cases" onclick="examTab('cases')">Fälle</button>
     <button id="seg-papers" onclick="examTab('papers')">Prüfungsbögen</button>
   </div>
-  <div id="examQuiz"></div>
+  <div id="examQuiz">
+    <div class="deck-head" style="flex-wrap:wrap; gap:8px">
+      <select class="pill-select" id="quizTierFilter" onchange="onQuizTierChange()" style="font-weight:800;border:2px solid var(--orange);color:var(--orange);background:var(--amber)">
+        <option value="Alle">🔥 Alle Prioritäten</option>
+        <option value="Kern">🔴 Nur Kernthemen</option>
+        <option value="Haeufig">🟡 Nur Häufig</option>
+        <option value="Ergaenzend">🟢 Nur Ergänzend</option>
+      </select>
+    </div>
+    <div id="quizArea"></div>
+  </div>
   <div id="examOpen" style="display:none"></div>
   <div id="examCases" style="display:none">
     <div class="deck-head"><select class="pill-select" id="caseTopic" onchange="renderCases()" style="max-width:100%"></select></div>
@@ -333,8 +343,20 @@ const EXAM_DATE = new Date('2026-09-30');
 let flashcards = [];
 let topics = [];
 let quizQuestions = [];
-let examQuestions = [];
-let cases = [];
+let examQuestions = []; // wird nach dem Laden der examPapers befüllt (siehe buildExamQuestions)
+// Echte Fallstudien aus den ausgewerteten IHK-Prüfungen 2020-2024 (Sachverhalt + Aufgabe + Lösung),
+// ergänzt um im Internet dokumentierte typische Prüfungsfallmuster.
+let cases = [
+  { cat:'Kündigung', title:'Verdachtskündigung wegen Datenschutzverstoß (Herbst 2023)', text:'Frau Müller ist Personalreferentin und hat Zugriff auf die Personalakten aller Mitarbeiter. Ihre Lebensgefährtin, Frau Mayer, ist freie Versicherungsmaklerin. Zwei Mitarbeiter stellen fest, dass ihnen unaufgefordert passgenaue private Versicherungsverträge mit vollständigen persönlichen Daten und Gehaltshöhe angeboten wurden, obwohl sie vorher nie Kontakt zu Frau Mayer hatten. Am 18.09. wird Frau Müller zur Stellungnahme aufgefordert; sie bestreitet schlicht, etwas damit zu tun zu haben. Am 25.09. wird der Betriebsrat zur beabsichtigten außerordentlichen Kündigung angehört, widerspricht am 26.09. – noch am selben Tag erhält Frau Müller die fristlose Kündigung. Sie erhebt am 05.10. Kündigungsschutzklage beim (örtlich unzuständigen) Arbeitsgericht Hamburg, das den Rechtsstreit nach Anhörung der Parteien an das zuständige Arbeitsgericht Lübeck verweist; dort geht die Klage erst am 16.10. ein.', question:'Erläutern Sie die Erfolgsaussichten der Kündigungsschutzklage.', answer:'Eine <strong>Tatkündigung</strong> scheidet aus, da Frau Müller die Weitergabe der Daten nicht nachgewiesen werden kann. In Betracht kommt jedoch eine <strong>Verdachtskündigung</strong>: Es besteht ein auf objektive Tatsachen gestützter dringender Verdacht einer schweren Pflichtverletzung, da nur sie als Personalreferentin Zugriff auf die betroffenen Daten hatte und ihre Lebensgefährtin diese nutzte. Die erforderliche <strong>Anhörung</strong> erfolgte am 18.09. – das schlichte Bestreiten reicht nicht aus, den Verdacht zu entkräften, sodass die <strong>2-Wochen-Frist des § 626 Abs.2 BGB</strong> erst ab vollständiger Kenntnis (18.09.) zu laufen beginnt. Da der Betriebsrat der Anhörung vom 25.09. bereits am 26.09. widersprochen hat, musste die 3-Tages-Frist des § 102 BetrVG nicht abgewartet werden. Die <strong>Kündigungsschutzklage</strong> wurde fristgerecht innerhalb der 3-Wochen-Frist des § 4 KSchG erhoben; nach ständiger Rechtsprechung bleibt die Frist auch bei Verweisung an das zuständige Gericht gewahrt, selbst wenn die Klage dort erst nach Fristablauf eingeht. <strong>Ergebnis:</strong> Die fristgerecht erhobene Klage hat keinen Erfolg – die Verdachtskündigung ist wirksam.' },
+  { cat:'Befristung', title:'Sachgrundlose Befristung trotz früherem Ferienjob (Herbst 2023)', text:'Herr Adelt wurde zum 01.10. für zwölf Monate sachgrundlos befristet eingestellt. Vor Ablauf einigt man sich am 23.09. schriftlich auf eine Verlängerung um weitere zwölf Monate, verbunden mit einer Gehaltserhöhung von 200 €/Monat. Anfang Oktober wendet Herr Adelt ein, die Befristung sei unwirksam, da er bereits vor ca. 15 Jahren für vier Wochen als Ferienjobber im selben Betrieb gearbeitet habe – das verstoße gegen das Vorbeschäftigungsverbot.', question:'Hat der Mitarbeiter recht? Beurteilen Sie die Rechtslage unter Nennung der Paragraphen.', answer:'Nach <strong>§ 14 Abs.2 S.2 TzBfG</strong> ist eine sachgrundlose Befristung unzulässig, wenn zuvor bereits ein Arbeitsverhältnis mit demselben Arbeitgeber bestand (<strong>Vorbeschäftigungsverbot</strong>). Nach der Rechtsprechung des BAG ist dieses Verbot jedoch einschränkend auszulegen: Es greift <u>nicht</u>, wenn die frühere Beschäftigung sehr lange zurückliegt, ganz anders geartet war oder von sehr kurzer Dauer war (z.B. Ferienjob während der Schulzeit) – eine Kettenbefristung droht in solchen Fällen nicht. Die <strong>ursprüngliche</strong> Befristung zum 01.10. war daher trotz des früheren Ferienjobs wirksam. Die Vereinbarung vom 23.09. stellt aber <u>keine bloße Verlängerung</u> dar, weil zusätzlich das Gehalt erhöht wurde (= neuer Vertragsinhalt) – es handelt sich rechtlich um den Abschluss eines neuen befristeten Arbeitsvertrages. Für einen neuen Vertrag greift das Vorbeschäftigungsverbot uneingeschränkt, da nun ein unmittelbar vorangegangenes Arbeitsverhältnis mit demselben Arbeitgeber besteht. <strong>Ergebnis:</strong> Die neue Befristung vom 23.09. ist unwirksam – das Arbeitsverhältnis gilt als unbefristet fortgesetzt.' },
+  { cat:'Urlaub', title:'Verfall von vergessenem Resturlaub (Frühjahr 2024)', text:'Frau Meier hat für 2023 noch 10 Tage Resturlaub, die sie vergessen hat zu beantragen. Der Resturlaub ist in der Entgeltabrechnung ausgewiesen, ein gesondertes Hinweisschreiben gab es aber nicht. Im Februar 2024 bemerkt sie ihr Versehen und beantragt für März 2024 zwei Wochen Urlaub aus dem alten Kontingent. Der Arbeitgeber lehnt ab und verweist darauf, Urlaub sei nach dem BUrlG im Kalenderjahr zu nehmen.', question:'Erläutern Sie die Rechtslage.', answer:'Nach der Rechtsprechung des <strong>EuGH und des BAG</strong> verfällt Urlaub am Jahresende bzw. Übertragungszeitraum nur dann, wenn der Arbeitgeber den Arbeitnehmer <strong>zuvor konkret aufgefordert hat</strong>, den Urlaub zu nehmen, und ihn klar und rechtzeitig auf den drohenden Verfall hingewiesen hat. Die Beweislast dafür trägt der Arbeitgeber. Der bloße Ausweis der Resturlaubstage in der Entgeltabrechnung genügt dieser Mitwirkungsobliegenheit <u>nicht</u> – ein gesondertes, klares Hinweisschreiben wäre erforderlich gewesen. Da der Arbeitgeber seiner Hinweispflicht nicht nachgekommen ist, sind die 10 Urlaubstage aus 2023 <u>nicht verfallen</u>. Frau Meier kann diese daher auch 2024 noch nehmen; die Ablehnung des Urlaubsantrags ist unwirksam.' },
+  { cat:'Betriebsrat', title:'Betriebsurlaub und Mitbestimmung (Frühjahr 2024)', text:'Nach dem beschriebenen Vorfall möchte die Geschäftsleitung künftig von den 30 Tagen Jahresurlaub aller Beschäftigten 22 Tage als Werksferien im August festlegen; den Mitarbeitern blieben damit nur noch 8 Tage zur freien Verfügung.', question:'Beurteilen Sie die Zulässigkeit dieses Vorhabens und gehen Sie auf die Mitbestimmungsrechte des Betriebsrats ein.', answer:'Nach der Rechtsprechung des BAG dürfen grundsätzlich nur bis zu etwa <strong>60 % des Jahresurlaubs</strong> als Betriebsurlaub verplant werden ("Fünftel-Regelung": mindestens ein Fünftel muss zur freien Verfügung bleiben; teils wird auch eine Drittel-Regelung diskutiert). Bei 30 Urlaubstagen dürften somit maximal ca. 18 Tage als Werksferien festgelegt werden – die geplanten 22 Tage überschreiten diese Grenze und sind <u>unzulässig</u>. Zudem hat der Betriebsrat nach <strong>§ 87 Abs.1 Nr.5 BetrVG</strong> ein <strong>zwingendes Mitbestimmungsrecht</strong> bei der Festlegung von Betriebsurlaub – ohne seine Zustimmung darf die Regelung nicht eingeführt werden.' },
+  { cat:'Personalcontrolling', title:'Personalcontrolling und Fluktuation in der Pharmabranche (Frühjahr 2023)', text:'Die D&S Pharma GmbH beschäftigt 150 Mitarbeiter und leidet unter einer Krankenquote von 7,8 % sowie einer Fluktuation von 10 %. Das Personalcontrolling wurde gerade erst als Stabsstelle in der Finanzabteilung etabliert und soll strategisch in ein umfassendes Personalmanagement eingebunden werden.', question:'Entwickeln Sie jeweils drei Vorschläge, wie den Herausforderungen demografischer Wandel, hohe Krankenquote und hohe Fluktuation mittelfristig begegnet werden kann.', answer:'<strong>Demografischer Wandel:</strong> eigene Ausbildung verstärken/über Bedarf ausbilden, aktives Employer Branding (z.B. Tag der offenen Tür, Hochschulmarketing), Programme für Berufseinsteiger und Zuwanderer schaffen.<br><strong>Hohe Krankenquote:</strong> Ursachenanalyse vor Gegenmaßnahmen, ergonomische Arbeitsgestaltung (Hebehilfen, Steh-/Laufmatten), betriebliches Gesundheitsmanagement (Gesundheits-Checks, Rückenschule, Betriebssport).<br><strong>Hohe Fluktuation:</strong> Ursachen erfragen (Führungsverhalten, Gehalt, Arbeitswege), Exit-/Feedbackgespräche einführen, Verbesserung von Arbeitszeitflexibilität und Homeoffice-Möglichkeiten, ggf. Rückkehrangebote an gute ehemalige Mitarbeiter.' },
+  { cat:'Personalplanung', title:'Nettopersonalbedarf bei Standortverlegung (Herbst 2023)', text:'Die Stadtreinigung AG mit 480 Mitarbeitern (80 in der zentralen Verwaltung, davon 2 in der Personalabteilung) plant, das Hochregallager in die Peripherie zu verlegen. Für das neue Lager sind fünf neue Stellen vorgesehen, vier Laborantinnen haben ihre Schwangerschaft und mindestens ein Jahr Elternzeit angekündigt, ein Anwärter wird für eine einjährige Meisterqualifizierung freigestellt, und sechs Mitarbeiter scheiden altersbedingt aus.', question:'Ermitteln Sie den Nettopersonalbedarf unter Berücksichtigung aller genannten Veränderungen.', answer:'<strong>Bruttopersonalbedarf</strong> = Ist-Stellen (150) + neue Stellen im Hochregallager (5) = 155 (Beispielrechnung je nach genauer Ausgangszahl der Prüfung).<br><strong>Fortgeschriebener Personalbestand</strong> = aktueller Mitarbeiterbestand + Zugänge (z.B. Übernahme aus Ausbildung) − Abgänge (Ruhestand −6, Elternzeit −4, Meisterqualifizierung-Freistellung −1, geschätzte Fluktuation).<br><strong>Nettopersonalbedarf</strong> = Bruttopersonalbedarf − fortgeschriebener Personalbestand. Wichtig für die Prüfung: Der Rechenweg (Ansatz aller genannten Zu- und Abgänge in der richtigen Reihenfolge) zählt mehr als das exakte Endergebnis – jede genannte Veränderung muss einzeln aufgeführt werden.' },
+  { cat:'Personal- und Organisationsentwicklung', title:'Beurteilungssystem und Schulung der Führungskräfte (Frühjahr 2023)', text:'Die PLA GmbH möchte ihr Beurteilungssystem grundlegend überarbeiten, insbesondere die Durchführung der Beurteilungsgespräche und die Ableitung konkreter Entwicklungsschritte verbessern. Dazu sollen die Führungskräfte in einer Schulung fit gemacht werden.', question:'Nennen Sie Anforderungen an ein gutes Beurteilungssystem und Inhalte, die in der Führungskräfteschulung berücksichtigt werden sollten.', answer:'<strong>Anforderungen an das Beurteilungssystem:</strong> einheitliches System mit klaren, nachvollziehbaren Kriterien; klare Skalierung zur Abbildung unterschiedlicher Leistungsstärken; Anpassbarkeit an unterschiedliche Mitarbeitergruppen.<br><strong>Schulungsinhalte für Führungskräfte:</strong> Aufbau und Anwendung des Beurteilungsbogens (Vortrag), Vorgehen bei Beobachtung und Bewertung (Diskussion/Erfahrungsaustausch), praktisches Ausfüllen anhand einer Fallstudie, Durchführung eines Beurteilungsgesprächs im Rollenspiel, Auswahl geeigneter Entwicklungsmaßnahmen (gemeinsame Diskussion). Ziel ist es, typische Beurteilungsfehler (Halo-Effekt, Nikolaus-Effekt, Tendenz zur Mitte) zu vermeiden und motivierende Gesprächsführung zu trainieren.' },
+  { cat:'Arbeitszeugnis', title:'Streit um die Schlussformel im Arbeitszeugnis (Frühjahr 2024)', text:'Herr Renz kündigt sein Arbeitsverhältnis zum 30.09., weil er ein besseres Angebot eines Mitbewerbers erhalten hat. Der Arbeitgeber ist enttäuscht und stellt ein Endzeugnis mit befriedigender Leistungs- und Verhaltensbeurteilung aus – ohne Dankes-, Bedauerns- oder Wunschformel. Herr Renz ist unzufrieden: Er meint, ihm stehe mindestens eine gute Beurteilung sowie eine Dankes- und Wunschformel am Ende des Zeugnisses zu.', question:'Beurteilen Sie beide Streitpunkte inklusive der Beweislastverteilung.', answer:'<strong>Schlussformel:</strong> Nach ständiger BAG-Rechtsprechung (zuletzt BAG vom 25.01.2022, 9 AZR 146/21) ist der Arbeitgeber <u>nicht verpflichtet</u>, eine Dankes-, Bedauerns- oder Wunschformel in ein Arbeitszeugnis aufzunehmen – er wäre sonst gezwungen, nicht empfundene Gefühle auszudrücken, was in die Meinungsfreiheit eingreifen würde. Herr Renz hat hier also <u>keinen</u> Anspruch.<br><strong>Notenstreit:</strong> Da statistisch inzwischen ca. 87 % aller Arbeitszeugnisse mit „gut" oder besser ausgestellt werden, gilt die Note „gut" nach BAG-Rechtsprechung (9 AZR 584/13) als Ausgangspunkt. Will der Arbeitgeber eine schlechtere Note vergeben, trägt <u>er</u> die Beweislast für die Richtigkeit der schlechteren Bewertung. Will umgekehrt der Arbeitnehmer eine bessere als die durchschnittliche Note erreichen, muss <u>er</u> dies beweisen. Da der Arbeitgeber hier nur eine befriedigende Note vergeben hat, muss er darlegen und beweisen, dass diese gerechtfertigt ist.' },
+  { cat:'Kündigung', title:'Kündigungsschutzklage nach Fristablauf durch Wochenende (Frühjahr 2024)', text:'Ein Arbeitnehmer erhebt Kündigungsschutzklage gegen eine ihm zugegangene Kündigung. Rechnerisch endet die 3-Wochen-Frist des § 4 KSchG an einem Samstag. Die Klage geht erst am folgenden Montag beim Arbeitsgericht ein. Der Arbeitgeber trägt vor, die Klage sei verfristet.', question:'Beurteilen Sie die Erfolgsaussichten der Klage im Hinblick auf die Fristwahrung.', answer:'Fällt das rechnerische Ende einer gesetzlichen Frist auf einen Samstag, Sonntag oder gesetzlichen Feiertag, verschiebt sich das Fristende nach <strong>§ 193 BGB</strong> auf den nächstfolgenden Werktag. Die am darauffolgenden Montag eingegangene Klage ist daher fristgerecht erhoben – die Kündigungsschutzklage ist insoweit zulässig.' },
+];
 let glossary = [
   // ===== Kern (🔴) — Aufbau-/Ablauforganisation, Projektmanagement =====
   { term:'Einlinien-Organisation', def:'Klassische Organisationsform, bei der jede Stelle genau einen Vorgesetzten hat (Einheit der Auftragserteilung). Vorteil: klare Kompetenzen; Nachteil: lange Dienstwege.', tier:'Kern' },
@@ -2033,7 +2055,8 @@ function renderHome(){
   document.getElementById('qm-topics').textContent=`${topics.length} Kapitel`;
 
   const h=new Date().getHours();
-  document.getElementById('greetText').textContent=h<11?'Guten Morgen, Daria!':h<18?'Hallo Daria!':'Noch eine Runde, Daria?';
+  const displayName = profile==='marcel' ? 'Marcel' : 'Daria';
+  document.getElementById('greetText').textContent=h<11?`Guten Morgen, ${displayName}!`:h<18?`Hallo ${displayName}!`:`Noch eine Runde, ${displayName}?`;
   document.getElementById('subText').textContent=known===0?'Starte mit „Heute lernen" – das Wichtigste zuerst.':`${pct}% sicher. Bleib dran, du schaffst das!`;
 
   // Prüfungsschwerpunkte-Stats (Kernthemen = kam in fast jeder der 9 ausgewerteten Prüfungen vor)
@@ -2186,7 +2209,7 @@ function renderDeck(){
     <div class="swipe-feedback know" id="fbKnow">GEWUSST</div>
     <div class="swipe-feedback dont" id="fbDont">NOCHMAL</div>
     <div class="topbar"></div>
-    <div class="cardscroll" id="cardScroll"><div class="ctag">${c.cat} · ${TIER_LABELS[c.tier]||c.tier} ${store.known[c._id]?'· ✓ sicher':''}</div><div class="qtext">${c.q}</div></div>
+    <div class="cardscroll" id="cardScroll"><div class="ctag">${c.cat} · ${TIER_LABELS[c.tier]||c.tier} ${store.known[c._id]?'· ✓ 3x sicher':(store.cardStreak&&store.cardStreak[c._id])?`· ${store.cardStreak[c._id]}/3`:''}</div><div class="qtext">${c.q}</div></div>
     <div class="flip-tip">Tippen zum Umdrehen · wischen zum Bewerten</div></div>`;
   attachSwipe();
   document.getElementById('cardScroll').addEventListener('click',flipTop);
@@ -2205,7 +2228,20 @@ function renderDeckButtons(answer){
   if(answer){bar.className='deck-actions';bar.innerHTML=`<button class="round-btn dont" onclick="rate(false)">✗ Nochmal</button><button class="round-btn know" onclick="rate(true)">✓ Gewusst</button>`;}
   else{bar.className='';bar.innerHTML=`<button class="flip-btn" onclick="flipTop()">Antwort zeigen</button>`;}
 }
-function rate(known){const c=deck[deckPos];store.known[c._id]=known;if(known)sessionKnown++;else sessionDont++;saveStore();animateOut(known);}
+function rate(known){
+  const c=deck[deckPos];
+  if(!store.cardStreak) store.cardStreak={};
+  if(known){
+    store.cardStreak[c._id]=(store.cardStreak[c._id]||0)+1;
+    if(store.cardStreak[c._id]>=3) store.known[c._id]=true;
+    sessionKnown++;
+  } else {
+    store.cardStreak[c._id]=0;
+    store.known[c._id]=false;
+    sessionDont++;
+  }
+  saveStore();animateOut(known);
+}
 function animateOut(known){const card=document.getElementById('topCard');if(card){card.style.transition='transform .3s ease,opacity .3s';card.style.transform=`translateX(${known?420:-420}px) rotate(${known?18:-18}deg)`;card.style.opacity='0';}setTimeout(()=>{deckPos++;document.getElementById('deckBtnBar')?.remove();renderDeck();},260);}
 let startX=0,startY=0,curX=0,dragging=false;
 function attachSwipe(){
@@ -2231,14 +2267,106 @@ function examTab(t){
 }
 
 // ===================== QUIZ =====================
-let qi=0,qscore=0,qansw=false,qorder=[],quizStarted=false;
-function startQuiz(){qi=0;qscore=0;qansw=false;qorder=quizQuestions.map((q,i)=>i);shuffle(qorder);renderQuiz();}
+// Multiple-Choice-Quiz, automatisch generiert aus Glossar-Begriffen (echte Definitionen als
+// Distraktoren aus ANDEREN Begriffen — daher plausibel, aber inhaltlich falsch für die gefragte
+// Frage) sowie aus den 40 echten Prüfungsbögen-Aufgaben (Distraktoren = echte Antworten anderer
+// Aufgaben desselben Handlungsbereichs). Gleiche 3x-richtig-Lernlogik wie bei den Lernkarten:
+// 3x in Folge richtig → Frage "gemeistert" und fällt aus der Rotation; 1x falsch → zurück auf 0.
+function truncateAnswer(html, maxLen){
+  let t = html.replace(/<br\s*\/?>/gi,' ').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
+  // Sucht das erste echte Satzende (nicht bei Abkürzungen wie "z.B.", "u.a.", "d.h.", "bzw.", "ggf." abbrechen)
+  const abbrev = /\b(z\.B|u\.a|d\.h|bzw|ggf|etc|inkl|Nr|Abs|Art|S|ca)\.$/i;
+  let dot=-1, from=0;
+  while(true){
+    const i = t.indexOf('. ', from);
+    if(i<0) break;
+    if(i>15 && i<maxLen && !abbrev.test(t.slice(0,i+1))){ dot=i; break; }
+    from = i+2;
+  }
+  if(dot>=0) t = t.slice(0, dot+1);
+  else if(t.length>maxLen) t = t.slice(0, maxLen-1).trim()+'…';
+  return t;
+}
+function buildQuizFromGlossary(){
+  return glossary.map((g,idx)=>{
+    const pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def);
+    shuffle(pool);
+    const distractors = pool.slice(0,3).map(x=>truncateAnswer(x.def,130));
+    const correctText = truncateAnswer(g.def,130);
+    const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
+    shuffle(opts);
+    return {
+      id:'gl_'+idx,
+      q:`Was bedeutet "${g.term}"?`,
+      options: opts.map(o=>o.t),
+      correct: opts.findIndex(o=>o.c),
+      exp: g.def,
+      tier: g.tier
+    };
+  });
+}
+function buildQuizFromPapers(){
+  return examPapers.map((p,idx)=>{
+    const pool = examPapers.filter((x,i)=>i!==idx && x.hb===p.hb && x.a!==p.a);
+    shuffle(pool);
+    let distractors = pool.slice(0,3).map(x=>truncateAnswer(x.a,130));
+    while(distractors.length<3){
+      const other = examPapers[(idx+distractors.length+1)%examPapers.length];
+      distractors.push(truncateAnswer(other.a,130));
+    }
+    const correctText = truncateAnswer(p.a,130);
+    const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
+    shuffle(opts);
+    return {
+      id:'ep_'+idx,
+      q:`(${p.exam}, ${p.hb}) ${p.q}`,
+      options: opts.map(o=>o.t),
+      correct: opts.findIndex(o=>o.c),
+      exp: p.a,
+      tier: 'Kern'
+    };
+  });
+}
+function buildAllQuizQuestions(){
+  quizQuestions = [...buildQuizFromGlossary(), ...buildQuizFromPapers()];
+}
+// "Prüfungsfragen"-Tab: dieselben 40 echten Prüfungsaufgaben als offene Fragen zum
+// Selbstbeantworten mit aufklappbarer Musterlösung (statt Multiple-Choice wie im Quiz-Tab).
+function buildExamQuestions(){
+  examQuestions = examPapers.map(p=>({
+    q: `(${p.exam}) ${p.q}`,
+    cat: p.hb,
+    points: 8,
+    sol: p.a
+  }));
+}
+
+let qi=0,qscore=0,qansw=false,qorder=[],quizStarted=false,quizTier='Alle';
+function onQuizTierChange(){ quizTier=document.getElementById('quizTierFilter').value; startQuiz(); }
+function quizPool(){
+  if(!store.quizStreak) store.quizStreak={};
+  return quizQuestions
+    .map((q,i)=>({q,i}))
+    .filter(x=> quizTier==='Alle' || x.q.tier===quizTier)
+    .filter(x=> (store.quizStreak[x.q.id]||0) < 3); // gemeisterte (3x richtig) fallen raus
+}
+function startQuiz(){
+  qi=0;qscore=0;qansw=false;
+  qorder=quizPool().map(x=>x.i);
+  shuffle(qorder);
+  renderQuiz();
+}
 function renderQuiz(){
-  const box=document.getElementById('examQuiz');
+  const box=document.getElementById('quizArea');
+  if(!qorder.length){
+    box.innerHTML=`<div class="box" style="text-align:center"><div style="font-size:44px">🏆</div><p class="muted">Alle Fragen dieser Kategorie sind schon 3x sicher gemeistert – super! Wähle oben eine andere Priorität oder setze den Fortschritt zurück.</p></div>`;
+    return;
+  }
   if(qi>=qorder.length)return showQuizResult();
   const q=quizQuestions[qorder[qi]];qansw=false;
+  const streak=(store.quizStreak&&store.quizStreak[q.id])||0;
   box.innerHTML=`<div class="box"><div class="quiz-progress"><span style="width:${Math.round(qi/qorder.length*100)}%"></span></div>
-    <div class="muted" style="font-size:13px;margin-bottom:10px">Frage ${qi+1} von ${qorder.length} · ${qscore} richtig</div>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">Frage ${qi+1} von ${qorder.length} · ${qscore} richtig · ${TIER_LABELS[q.tier]||''} · ${streak}/3 gemeistert</div>
     <h3 style="font-size:17px;line-height:1.4">${q.q}</h3>
     <div id="qOpts">${q.options.map((o,i)=>`<button class="qopt" onclick="answerQuiz(${i})">${o}</button>`).join('')}</div>
     <div id="qExp"></div></div>`;
@@ -2246,12 +2374,20 @@ function renderQuiz(){
 function answerQuiz(i){
   if(qansw)return;qansw=true;const q=quizQuestions[qorder[qi]];
   document.querySelectorAll('#qOpts .qopt').forEach((b,idx)=>{if(idx===q.correct)b.classList.add('correct');else if(idx===i)b.classList.add('wrong');});
-  if(i===q.correct)qscore++;
+  if(!store.quizStreak) store.quizStreak={};
+  if(i===q.correct){
+    qscore++;
+    store.quizStreak[q.id]=(store.quizStreak[q.id]||0)+1;
+  } else {
+    store.quizStreak[q.id]=0;
+  }
+  saveStore();
   document.getElementById('qExp').innerHTML=`<div class="qexp"><strong>Erklärung:</strong> ${q.exp}</div><button class="btn block" style="margin-top:12px" onclick="qi++;renderQuiz()">${qi+1>=qorder.length?'Ergebnis':'Weiter →'}</button>`;
 }
 function showQuizResult(){
-  const pct=Math.round(qscore/qorder.length*100);
-  document.getElementById('examQuiz').innerHTML=`<div class="box" style="text-align:center"><div style="font-size:50px">${pct>=80?'🏆':pct>=60?'👍':'📚'}</div><div style="font-size:34px;font-weight:900;color:var(--p-dark)">${pct}%</div><p class="muted">${pct>=80?'Sehr gut – das sitzt!':pct>=60?'Solide. Schwächen wiederholen.':'Erst Themen & Karten wiederholen.'}</p><button class="btn block" onclick="startQuiz()">Nochmal</button><button class="btn ghost block" style="margin-top:10px" onclick="go('v-home')">Übersicht</button></div>`;
+  const tot=qorder.length;
+  const pct=tot?Math.round(qscore/tot*100):0;
+  document.getElementById('quizArea').innerHTML=`<div class="box" style="text-align:center"><div style="font-size:50px">${pct>=80?'🏆':pct>=60?'👍':'📚'}</div><div style="font-size:34px;font-weight:900;color:var(--p-dark)">${pct}%</div><p class="muted">${pct>=80?'Sehr gut – das sitzt!':pct>=60?'Solide. Schwächen wiederholen.':'Erst Themen & Karten wiederholen.'}</p><button class="btn block" onclick="startQuiz()">Nochmal</button><button class="btn ghost block" style="margin-top:10px" onclick="go('v-home')">Übersicht</button></div>`;
 }
 
 // ===================== OFFENE PRÜFUNGSFRAGEN =====================
@@ -2435,6 +2571,8 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 
 // ===================== INIT =====================
 tagPriorities();
+buildAllQuizQuestions();
+buildExamQuestions();
 initChapterSelect();initTopicSelect();initCaseSelect();initAZ();initLawFilter();renderHome();
 if(profile) initForProfile();
 </script>
