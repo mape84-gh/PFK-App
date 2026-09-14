@@ -2228,7 +2228,7 @@ function flipTop(){
   const c=deck[deckPos];const card=document.getElementById('topCard');
   const scroll=document.getElementById('cardScroll');const tip=card.querySelector('.flip-tip');
   if(!showingAnswer){showingAnswer=true;card.classList.add('is-answer');
-    scroll.innerHTML=`<div class="ctag">${c.cat} · Antwort</div><div class="atext">${c.a}</div>`;
+    scroll.innerHTML=`<div class="ctag">${c.cat} · Antwort</div><div class="qtext" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">${c.q}</div><div class="atext">${c.a}</div>`;
     tip.textContent='✓ Gewusst (rechts) · Nochmal (links)';tip.classList.add('answer');
     renderDeckButtons(true);}
 }
@@ -2287,102 +2287,38 @@ function truncateAnswer(html, maxLen){
   // damit im Quiz immer der komplette Text lesbar ist.
   return html.replace(/<br\s*\/?>/gi,' ').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
 }
+// Quiz-Fragen sind wie Lernkarten aufgebaut: Frage stellen, Antwort selbst aufdecken,
+// dann selbst einschätzen "gewusst"/"nicht gewusst" (keine Multiple-Choice-Optionen mehr —
+// die waren inhaltlich oft nicht sauber abgrenzbar und liefen faktisch auf dieselbe Logik
+// wie die Karteikarten hinaus).
 function buildQuizFromGlossary(){
-  const out=[];
-  glossary.forEach((g,idx)=>{
-    // Distraktoren nur aus derselben Prioritätsstufe (Kern/Häufig) — die Begriffe sind im Glossar
-    // bereits nach Themenblock gruppiert, sodass gleiche Stufe meist auch thematisch näher liegt.
-    let pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def && x.tier===g.tier);
-    if(pool.length<3) pool = glossary.filter((x,i)=>i!==idx && x.def!==g.def);
-    shuffle(pool);
-    const correctText = truncateAnswer(g.def,130);
-    const distractors=[]; const usedTexts=new Set([correctText]);
-    for(const cand of pool){
-      const t = truncateAnswer(cand.def,130);
-      if(usedTexts.has(t)) continue;
-      usedTexts.add(t); distractors.push(t);
-      if(distractors.length>=3) break;
-    }
-    if(distractors.length<3) return;
-    const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
-    shuffle(opts);
-    out.push({
-      id:'gl_'+idx,
-      q:`Was bedeutet "${g.term}"?`,
-      options: opts.map(o=>o.t),
-      correct: opts.findIndex(o=>o.c),
-      exp: g.def,
-      tier: g.tier
-    });
-  });
-  return out;
+  return glossary.map((g,idx)=>({
+    id:'gl_'+idx,
+    q:`Was bedeutet "${g.term}"?`,
+    exp: g.def,
+    tier: g.tier
+  }));
 }
-// WICHTIG: Distraktoren müssen inhaltlich zum Thema der Frage passen (sonst zu leicht/unsinnig,
-// z.B. eine Betriebsrats-Antwort bei einer Frage zum situativen Führungsstil). Deshalb NUR aus
-// derselben Kategorie bzw. demselben Handlungsbereich ziehen; reicht der Vorrat nicht für 3
-// unterschiedliche, plausible Distraktoren, wird die Frage lieber übersprungen als eine
-// thematisch fremde Antwort einzubauen.
 function buildQuizFromPapers(){
-  const out=[];
-  examPapers.forEach((p,idx)=>{
-    const pool = examPapers.filter((x,i)=>i!==idx && x.hb===p.hb && x.a!==p.a);
-    shuffle(pool);
-    const correctText = truncateAnswer(p.a,130);
-    const distractors=[]; const usedTexts=new Set([correctText]);
-    for(const cand of pool){
-      const t = truncateAnswer(cand.a,130);
-      if(usedTexts.has(t)) continue;
-      usedTexts.add(t); distractors.push(t);
-      if(distractors.length>=3) break;
-    }
-    if(distractors.length<3) return; // zu wenig Aufgaben im selben Handlungsbereich -> überspringen
-    const opts = [{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
-    shuffle(opts);
-    out.push({
-      id:'ep_'+idx,
-      q:`(${p.exam}, ${p.hb}) ${p.q}`,
-      options: opts.map(o=>o.t),
-      correct: opts.findIndex(o=>o.c),
-      exp: p.a,
-      tier: 'Kern'
-    });
-  });
-  return out;
+  return examPapers.map((p,idx)=>({
+    id:'ep_'+idx,
+    q:`(${p.exam}, ${p.hb}) ${p.q}`,
+    exp: p.a,
+    tier: 'Kern'
+  }));
 }
-// Zusätzlich: eine MC-Frage pro Karteikarte (921 Karten), Distraktoren = echte, aber falsche
-// Antworten anderer Karten DERSELBEN Kategorie; reicht das nicht, Distraktoren aus demselben
-// Handlungsbereich (HB1-4) — nie aus fachfremden Kategorien. Reicht auch das nicht, wird die
-// Karte für das Quiz übersprungen (bleibt aber ganz normal als Lernkarte nutzbar).
+// Eine Frage pro Karteikarte (921 Karten) — dieselbe Frage/Antwort wie in den Lernkarten,
+// nur eingebettet in den separaten Quiz-Fortschritt/Streak.
 function buildQuizFromFlashcards(){
-  const byCat = {};
-  flashcards.forEach(c=>{ (byCat[c.cat]=byCat[c.cat]||[]).push(c); });
-  const byChapter = {};
-  flashcards.forEach(c=>{ const ch=chapterOf(c.cat); (byChapter[ch]=byChapter[ch]||[]).push(c); });
   const seen = new Set(); // vermeidet quasi-identische Fragen/Antworten
   const out = [];
   flashcards.forEach((c,idx)=>{
-    const correctText = truncateAnswer(c.a,140);
-    const key = c.q+'|'+correctText;
+    const key = c.q+'|'+c.a;
     if(seen.has(key)) return;
-    let candidates = (byCat[c.cat]||[]).filter(x=>x!==c);
-    if(candidates.length<3) candidates = (byChapter[chapterOf(c.cat)]||[]).filter(x=>x!==c);
-    shuffle(candidates);
-    const distractors=[]; const usedTexts=new Set([correctText]);
-    for(const cand of candidates){
-      const t = truncateAnswer(cand.a,140);
-      if(usedTexts.has(t)) continue;
-      usedTexts.add(t); distractors.push(t);
-      if(distractors.length>=3) break;
-    }
-    if(distractors.length<3) return; // zu wenig thematisch passende Alternativen -> überspringen
     seen.add(key);
-    const opts=[{t:correctText,c:true},...distractors.map(d=>({t:d,c:false}))];
-    shuffle(opts);
     out.push({
       id:'fc_'+idx,
       q:c.q,
-      options:opts.map(o=>o.t),
-      correct:opts.findIndex(o=>o.c),
       exp:c.a,
       tier:c.tier
     });
@@ -2428,23 +2364,31 @@ function renderQuiz(){
   const q=quizQuestions[qorder[qi]];qansw=false;
   const streak=(store.quizStreak&&store.quizStreak[q.id])||0;
   box.innerHTML=`<div class="box"><div class="quiz-progress"><span style="width:${Math.round(qi/qorder.length*100)}%"></span></div>
-    <div class="muted" style="font-size:13px;margin-bottom:10px">Frage ${qi+1} von ${qorder.length} · ${qscore} richtig · ${TIER_LABELS[q.tier]||''} · ${streak}/3 gemeistert</div>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">Frage ${qi+1} von ${qorder.length} · ${qscore} gewusst · ${TIER_LABELS[q.tier]||''} · ${streak}/3 gemeistert</div>
     <h3 style="font-size:17px;line-height:1.4">${q.q}</h3>
-    <div id="qOpts">${q.options.map((o,i)=>`<button class="qopt" onclick="answerQuiz(${i})">${o}</button>`).join('')}</div>
+    <div id="qOpts"><button class="btn block" onclick="revealQuiz()">Antwort zeigen</button></div>
     <div id="qExp"></div></div>`;
 }
-function answerQuiz(i){
+function revealQuiz(){
   if(qansw)return;qansw=true;const q=quizQuestions[qorder[qi]];
-  document.querySelectorAll('#qOpts .qopt').forEach((b,idx)=>{if(idx===q.correct)b.classList.add('correct');else if(idx===i)b.classList.add('wrong');});
+  document.getElementById('qOpts').innerHTML='';
+  document.getElementById('qExp').innerHTML=`<div class="qexp"><strong>Antwort:</strong> ${q.exp}</div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn ghost block" onclick="answerQuiz(false)">✗ Nicht gewusst</button>
+      <button class="btn block" onclick="answerQuiz(true)">✓ Gewusst</button>
+    </div>`;
+}
+function answerQuiz(known){
+  const q=quizQuestions[qorder[qi]];
   if(!store.quizStreak) store.quizStreak={};
-  if(i===q.correct){
+  if(known){
     qscore++;
     store.quizStreak[q.id]=(store.quizStreak[q.id]||0)+1;
   } else {
     store.quizStreak[q.id]=0;
   }
   saveStore();
-  document.getElementById('qExp').innerHTML=`<div class="qexp"><strong>Erklärung:</strong> ${q.exp}</div><button class="btn block" style="margin-top:12px" onclick="qi++;renderQuiz()">${qi+1>=qorder.length?'Ergebnis':'Weiter →'}</button>`;
+  document.getElementById('qExp').innerHTML+=`<button class="btn block" style="margin-top:12px" onclick="qi++;renderQuiz()">${qi+1>=qorder.length?'Ergebnis':'Weiter →'}</button>`;
 }
 function showQuizResult(){
   const tot=qorder.length;
